@@ -1,502 +1,60 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="fr">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <meta name="theme-color" content="#0f172a">
-  <title>Preset IA — Retouche par analyse photo</title>
-  <link rel="manifest" href="manifest.json">
-  <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='96' fill='%230ea5e9'/%3E%3Ctext x='256' y='340' font-size='280' text-anchor='middle' fill='white' font-family='sans-serif'%3E%E2%9C%A6%3C/text%3E%3C/svg%3E">
-  <script src="https://cdn.tailwindcss.com"></script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Test connexion Gemini</title>
+  <style>
+    body{font:15px system-ui,-apple-system,sans-serif;margin:0;padding:18px;background:#0f172a;color:#e2e8f0}
+    h2{margin:0 0 12px}
+    input,button{font:inherit;padding:11px;border-radius:9px;border:1px solid #334155;background:#1e293b;color:#fff;width:100%;box-sizing:border-box;margin:6px 0}
+    button{background:#0ea5e9;border:0;font-weight:600;cursor:pointer}
+    pre{white-space:pre-wrap;word-break:break-word;background:#000;color:#0f0;padding:12px;border-radius:9px;font:12px/1.5 ui-monospace,monospace;margin-top:14px}
+    .muted{color:#64748b;font-size:13px}
+  </style>
 </head>
-<body class="bg-slate-900 text-slate-100 min-h-screen antialiased">
-  <main class="max-w-xl mx-auto px-4 py-8 sm:py-12">
-
-    <header class="mb-8 text-center">
-      <h1 class="text-3xl font-bold tracking-tight">✦ Preset IA</h1>
-      <p class="text-slate-400 mt-2 text-sm">
-        Upload une photo, l'IA l'analyse et génère un preset Lightroom
-        <code class="text-sky-400">.xmp</code> pour la retoucher.
-      </p>
-    </header>
-
-    <!-- Clé API -->
-    <section class="mb-5">
-      <label for="apiKey" class="block text-sm font-medium text-slate-300 mb-1.5">Clé API Gemini</label>
-      <input id="apiKey" type="password" autocomplete="off" spellcheck="false"
-        placeholder="Colle ta clé Google AI Studio…"
-        class="w-full rounded-lg bg-slate-800 border border-slate-700 px-3.5 py-2.5 text-sm
-               focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500 transition">
-      <p class="text-xs text-slate-500 mt-1.5">
-        Stockée uniquement dans ton navigateur.
-        <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener" class="text-sky-400 hover:underline">Obtenir une clé</a>
-      </p>
-    </section>
-
-    <!-- Upload photo -->
-    <section class="mb-5">
-      <label class="block text-sm font-medium text-slate-300 mb-1.5">Photo à analyser</label>
-      <label for="photo"
-        class="block cursor-pointer rounded-lg border-2 border-dashed border-slate-700 hover:border-sky-500
-               bg-slate-800/50 transition overflow-hidden">
-        <div id="dropHint" class="px-4 py-10 text-center text-slate-400 text-sm">
-          📷 Touche ici pour choisir une photo<br>
-          <span class="text-xs text-slate-500">JPEG, PNG… redimensionnée automatiquement</span>
-        </div>
-        <img id="preview" class="hidden w-full max-h-72 object-contain bg-black" alt="aperçu">
-        <input id="photo" type="file" accept="image/*" class="hidden">
-      </label>
-    </section>
-
-    <!-- Direction optionnelle -->
-    <section class="mb-5">
-      <label for="prompt" class="block text-sm font-medium text-slate-300 mb-1.5">
-        Direction de style <span class="text-slate-500 font-normal">(optionnel)</span>
-      </label>
-      <input id="prompt" type="text"
-        placeholder="Ex : rendu cinématique chaud — ou laisse vide pour une amélioration naturelle"
-        class="w-full rounded-lg bg-slate-800 border border-slate-700 px-3.5 py-2.5 text-sm
-               focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500 transition">
-    </section>
-
-    <button id="generateBtn"
-      class="w-full rounded-lg bg-sky-600 hover:bg-sky-500 active:bg-sky-700 disabled:opacity-50
-             disabled:cursor-not-allowed font-semibold py-3 transition flex items-center justify-center gap-2">
-      <span id="btnLabel">Analyser &amp; générer le preset</span>
-      <svg id="btnSpinner" class="hidden animate-spin h-5 w-5" viewBox="0 0 24 24" fill="none">
-        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.4 0 0 5.4 0 12h4z"></path>
-      </svg>
-    </button>
-
-    <div id="status" class="hidden mt-4 rounded-lg px-4 py-3 text-sm"></div>
-
-    <!-- Résultat -->
-    <section id="resultCard" class="hidden mt-6 rounded-xl bg-slate-800/60 border border-slate-700 overflow-hidden">
-      <div class="px-5 py-4 border-b border-slate-700">
-        <h2 class="font-semibold text-lg">Diagnostic &amp; réglages</h2>
-        <p id="styleName" class="text-sky-400 text-sm mt-0.5"></p>
-        <p id="analysis" class="text-slate-300 text-sm mt-1"></p>
-      </div>
-      <div id="settingsWrap" class="divide-y divide-slate-700"></div>
-      <div class="p-5 bg-slate-800 space-y-3">
-        <button id="exportBtn"
-          class="w-full rounded-lg bg-violet-600 hover:bg-violet-500 active:bg-violet-700 font-semibold py-3 transition">
-          🎯 Exporter vers Lightroom
-        </button>
-        <button id="downloadBtn"
-          class="w-full rounded-lg bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 font-semibold py-3 transition">
-          ⬇ Télécharger preset-ia.xmp
-        </button>
-        <p id="folderInfo" class="text-xs text-slate-500 text-center"></p>
-      </div>
-    </section>
-
-    <footer class="text-center text-xs text-slate-600 mt-10 mb-24">
-      Le preset est calibré pour la photo analysée. Importe-le : Développement → Paramètres prédéfinis → clic droit → Importer.
-    </footer>
-  </main>
-
-  <!-- Bouton pour afficher/masquer le debug -->
-  <button id="dbgToggle"
-    class="fixed bottom-3 right-3 z-[10000] rounded-full bg-slate-700/90 hover:bg-slate-600 text-white
-           w-11 h-11 text-lg shadow-lg" title="Afficher/masquer le debug">🐞</button>
-
+<body>
+  <h2>🔧 Test connexion Gemini</h2>
+  <p class="muted">Ouvre ce fichier sur l'appareil/réseau qui pose problème, colle ta clé, lance les tests.</p>
+  <input id="k" type="password" placeholder="Clé API Gemini" autocomplete="off">
+  <button id="go">Lancer les tests</button>
+  <pre id="o"></pre>
   <script>
-  /* ============================================================
-     1. CONFIGURATION DES PARAMÈTRES (data-driven)
-     key (JSON/IA) → crs (attribut XMP Lightroom)
-     signed:false ⇒ valeur sans signe (teintes 0-360, sat 0-100)
-  ============================================================ */
-  const HUES = ["Red","Orange","Yellow","Green","Aqua","Blue","Purple","Magenta"];
-  const HUE_FR = {Red:"Rouge",Orange:"Orange",Yellow:"Jaune",Green:"Vert",Aqua:"Cyan",Blue:"Bleu",Purple:"Violet",Magenta:"Magenta"};
+    const o = document.getElementById("o");
+    const log = (...a) => { o.textContent += a.join(" ") + "\n"; };
 
-  const hslFields = [];
-  for (const c of HUES) {
-    hslFields.push({ key:`Hue${c}`, label:`Teinte ${HUE_FR[c]}`, crs:`HueAdjustment${c}` });
-    hslFields.push({ key:`Sat${c}`, label:`Sat. ${HUE_FR[c]}`,   crs:`SaturationAdjustment${c}` });
-    hslFields.push({ key:`Lum${c}`, label:`Lum. ${HUE_FR[c]}`,   crs:`LuminanceAdjustment${c}` });
-  }
+    document.getElementById("go").addEventListener("click", async () => {
+      o.textContent = "";
+      const key = document.getElementById("k").value.trim();
+      if(!key){ log("⛔ Mets ta clé d'abord."); return; }
 
-  const GROUPS = [
-    { title:"Réglages de base", always:true, fields:[
-      { key:"Exposure",   label:"Exposition",      crs:"Exposure2012", decimals:2 },
-      { key:"Contrast",   label:"Contraste",       crs:"Contrast2012" },
-      { key:"Highlights", label:"Hautes lumières", crs:"Highlights2012" },
-      { key:"Shadows",    label:"Ombres",          crs:"Shadows2012" },
-      { key:"Whites",     label:"Blancs",          crs:"Whites2012" },
-      { key:"Blacks",     label:"Noirs",           crs:"Blacks2012" },
-      { key:"Texture",    label:"Texture",         crs:"Texture" },
-      { key:"Clarity",    label:"Clarté",          crs:"Clarity2012" },
-      { key:"Dehaze",     label:"Correction voile",crs:"Dehaze" },
-      { key:"Vibrance",   label:"Vibrance",        crs:"Vibrance" },
-      { key:"Saturation", label:"Saturation",      crs:"Saturation" },
-    ]},
-    { title:"Balance des blancs", always:true, fields:[
-      { key:"Temperature", label:"Température", crs:"Temperature" },
-      { key:"Tint",        label:"Teinte",     crs:"Tint" },
-    ]},
-    { title:"Courbe de tonalité", fields:[
-      { key:"CurveHighlights", label:"Hautes lumières", crs:"ParametricHighlights" },
-      { key:"CurveLights",     label:"Clairs",          crs:"ParametricLights" },
-      { key:"CurveDarks",      label:"Sombres",         crs:"ParametricDarks" },
-      { key:"CurveShadows",    label:"Ombres",          crs:"ParametricShadows" },
-    ]},
-    { title:"TSL / Mélangeur de couleurs", fields: hslFields },
-    { title:"Étalonnage couleur", fields:[
-      { key:"ShadowHue", label:"Teinte ombres",   crs:"SplitToningShadowHue", signed:false, max:360 },
-      { key:"ShadowSat", label:"Sat. ombres",     crs:"SplitToningShadowSaturation", signed:false, max:100 },
-      { key:"ShadowLum", label:"Lum. ombres",     crs:"ColorGradeShadowLum" },
-      { key:"MidHue",    label:"Teinte tons moy.",crs:"ColorGradeMidtoneHue", signed:false, max:360 },
-      { key:"MidSat",    label:"Sat. tons moy.",  crs:"ColorGradeMidtoneSat", signed:false, max:100 },
-      { key:"MidLum",    label:"Lum. tons moy.",  crs:"ColorGradeMidtoneLum" },
-      { key:"HighHue",   label:"Teinte hautes l.",crs:"SplitToningHighlightHue", signed:false, max:360 },
-      { key:"HighSat",   label:"Sat. hautes l.",  crs:"SplitToningHighlightSaturation", signed:false, max:100 },
-      { key:"HighLum",   label:"Lum. hautes l.",  crs:"ColorGradeHighlightLum" },
-      { key:"Balance",   label:"Équilibre",       crs:"SplitToningBalance" },
-    ]},
-    { title:"Effets", fields:[
-      { key:"Vignette",       label:"Vignettage",        crs:"PostCropVignetteAmount" },
-      { key:"GrainAmount",    label:"Grain — quantité",  crs:"GrainAmount", signed:false, max:100 },
-      { key:"GrainSize",      label:"Grain — taille",    crs:"GrainSize", signed:false, max:100 },
-      { key:"GrainFrequency", label:"Grain — rugosité",  crs:"GrainFrequency", signed:false, max:100 },
-    ]},
-  ];
-  const ALL_FIELDS = GROUPS.flatMap(g => g.fields);
+      // ① GET simple — NE déclenche PAS de préflight CORS
+      log("① GET /models (requête simple)…");
+      try{
+        const r = await fetch("https://generativelanguage.googleapis.com/v1beta/models?key=" + encodeURIComponent(key));
+        log("   → HTTP", r.status);
+        const j = await r.json();
+        log("   →", r.ok ? ("OK ✅ — " + (j.models?.length||0) + " modèles") : (j.error?.message || "erreur"));
+      }catch(e){ log("   ⛔ ÉCHEC:", e.name, "—", e.message); }
 
-  const MODEL = "gemini-2.5-flash";
-  const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
-  const FILE_NAME = "preset-ia.xmp";
-  const MAX_EDGE = 1280; // redimensionnement de la photo avant envoi
+      // ② POST JSON — déclenche un préflight CORS (OPTIONS)
+      log("\n② POST generateContent (préflight CORS)…");
+      try{
+        const r = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=" + encodeURIComponent(key), {
+          method:"POST",
+          headers:{ "Content-Type":"application/json" },
+          body: JSON.stringify({ contents:[{ parts:[{ text:"dis bonjour" }] }] })
+        });
+        log("   → HTTP", r.status);
+        const j = await r.json();
+        log("   →", r.ok ? "OK ✅ — ton réseau accepte les POST" : (j.error?.message || "erreur"));
+      }catch(e){ log("   ⛔ ÉCHEC:", e.name, "—", e.message); }
 
-  const SYSTEM_PROMPT = `Tu es un retoucheur photo expert Adobe Lightroom. On te fournit UNE photo, et parfois une direction de style.
-
-Analyse RÉELLEMENT l'image que tu vois : exposition (sous/sur-exposée ?), balance des blancs et dominante de couleur, contraste, hautes lumières et ombres écrêtées, saturation, netteté apparente, ambiance générale.
-
-Puis calcule un réglage Lightroom qui :
-1. CORRIGE les défauts techniques constatés sur cette photo précise.
-2. Applique la direction de style si elle est fournie ; sinon, propose une amélioration naturelle et équilibrée.
-
-Règles ABSOLUES :
-- Réponds UNIQUEMENT par un objet JSON valide (aucun texte ni markdown autour). Valeurs numériques.
-- La PLUPART des champs restent à 0 : ne dévie que pour ce qui améliore réellement CETTE photo. Évite la surcorrection.
-- Bornes : "Exposure" -2.0 à 2.0 (décimal). Les "*Hue" d'étalonnage 0 à 360. Les saturations d'étalonnage et "Grain*" 0 à 100. Tout le reste -100 à 100 (entiers).
-- "Temperature"/"Tint" sont RELATIFS (-100 à 100).
-- "analysis" : 1 à 2 phrases décrivant ce que tu OBSERVES sur la photo et ta stratégie de correction.
-- "styleName" : nom court du rendu (max 4 mots).`;
-
-  const props = { styleName:{type:"STRING"}, analysis:{type:"STRING"} };
-  for (const f of ALL_FIELDS) props[f.key] = { type:"NUMBER" };
-  const RESPONSE_SCHEMA = { type:"OBJECT", properties:props, required:["styleName","analysis"] };
-
-  /* ============================================================
-     2. DOM
-  ============================================================ */
-  const $ = id => document.getElementById(id);
-  const apiKeyInput=$("apiKey"), promptInput=$("prompt"), photoInput=$("photo");
-  const preview=$("preview"), dropHint=$("dropHint");
-  const generateBtn=$("generateBtn"), btnLabel=$("btnLabel"), btnSpinner=$("btnSpinner"), statusBox=$("status");
-  const resultCard=$("resultCard"), styleNameEl=$("styleName"), analysisEl=$("analysis");
-  const settingsWrap=$("settingsWrap"), exportBtn=$("exportBtn"), downloadBtn=$("downloadBtn"), folderInfo=$("folderInfo");
-
-  let lastXmp = null;
-  let currentImage = null;   // { mimeType, data(base64) }
-  let dirHandle = null;
-
-  /* ---------- PANNEAU DEBUG ---------- */
-  const _dbg = document.createElement("pre");
-  _dbg.style.cssText = "position:fixed;left:0;right:0;bottom:0;max-height:42vh;overflow:auto;margin:0;padding:10px;background:#000;color:#0f0;font:11px/1.45 monospace;z-index:9998;white-space:pre-wrap;border-top:2px solid #0f0";
-  document.body.appendChild(_dbg);
-  function dbg(...a){
-    const line = a.map(x => typeof x==="string" ? x : JSON.stringify(x)).join(" ");
-    _dbg.textContent += line + "\n";
-    _dbg.scrollTop = _dbg.scrollHeight;
-  }
-  $("dbgToggle").addEventListener("click", ()=>{
-    _dbg.style.display = (_dbg.style.display==="none") ? "block" : "none";
-  });
-  window.addEventListener("error", e => dbg("⛔ JS:", e.message, "@", (e.filename||"")+":"+e.lineno));
-  window.addEventListener("unhandledrejection", e => dbg("⛔ Promise:", (e.reason?.message || e.reason) + ""));
-  dbg("✅ Debug prêt —", navigator.userAgent);
-
-  /* ============================================================
-     3. CLÉ API
-  ============================================================ */
-  apiKeyInput.value = localStorage.getItem("gemini_api_key") || "";
-  apiKeyInput.addEventListener("input", () =>
-    localStorage.setItem("gemini_api_key", apiKeyInput.value.trim()));
-
-  /* ============================================================
-     4. UI helpers
-  ============================================================ */
-  function setLoading(on){ generateBtn.disabled=on; btnLabel.textContent=on?"Analyse en cours…":"Analyser & générer le preset"; btnSpinner.classList.toggle("hidden",!on); }
-  function showStatus(msg,type="info"){
-    statusBox.textContent=msg;
-    statusBox.className="mt-4 rounded-lg px-4 py-3 text-sm "+(type==="error"
-      ?"bg-red-500/15 text-red-300 border border-red-500/30"
-      :"bg-sky-500/15 text-sky-300 border border-sky-500/30");
-    statusBox.classList.remove("hidden");
-  }
-  function clearStatus(){ statusBox.classList.add("hidden"); }
-
-  function fmt(value, f){
-    const n=Number(value)||0;
-    const s=f.decimals?n.toFixed(f.decimals):String(Math.round(n));
-    if(f.signed===false) return s;
-    return n>0 ? "+"+s : s;
-  }
-
-  /* ============================================================
-     5. CHARGEMENT + REDIMENSIONNEMENT DE LA PHOTO
-  ============================================================ */
-  function loadImage(file){
-    return new Promise((resolve,reject)=>{
-      const img=new Image();
-      const url=URL.createObjectURL(file);
-      img.onload=()=>{
-        URL.revokeObjectURL(url);
-        let w=img.naturalWidth, h=img.naturalHeight;
-        if(Math.max(w,h)>MAX_EDGE){ const r=MAX_EDGE/Math.max(w,h); w=Math.round(w*r); h=Math.round(h*r); }
-        const c=document.createElement("canvas"); c.width=w; c.height=h;
-        c.getContext("2d").drawImage(img,0,0,w,h);
-        const dataUrl=c.toDataURL("image/jpeg",0.9);
-        resolve({ mimeType:"image/jpeg", data:dataUrl.split(",")[1], preview:dataUrl });
-      };
-      img.onerror=()=>{ URL.revokeObjectURL(url); reject(new Error("Cette image n'a pas pu être lue.")); };
-      img.src=url;
+      log("\n— Interprétation —");
+      log("• ① OK + ② OK  → le réseau marche (le souci venait d'ailleurs).");
+      log("• ① OK + ② KO  → le préflight POST est bloqué (proxy / bloqueur / MDM).");
+      log("• ① KO + ② KO  → tout Google est bloqué sur cet appareil/navigateur.");
     });
-  }
-
-  photoInput.addEventListener("change", async ()=>{
-    const file=photoInput.files?.[0];
-    if(!file) return;
-    clearStatus();
-    try{
-      dbg("📷 Photo:", file.name, Math.round(file.size/1024)+" KB");
-      const out=await loadImage(file);
-      currentImage={ mimeType:out.mimeType, data:out.data };
-      preview.src=out.preview; preview.classList.remove("hidden"); dropHint.classList.add("hidden");
-      dbg("✅ Redimensionnée →", Math.round(out.data.length/1024)+" KB base64");
-    }catch(e){ dbg("⛔", e.message); showStatus(e.message,"error"); currentImage=null; }
-  });
-
-  /* ============================================================
-     6. APPEL GEMINI (multimodal : image + direction)
-  ============================================================ */
-  async function callGemini(apiKey, image, direction){
-    dbg("→ Image:", image.mimeType, Math.round(image.data.length/1024)+" KB (base64)");
-    const parts=[ { inlineData:{ mimeType:image.mimeType, data:image.data } } ];
-    parts.push({ text: direction
-      ? `Direction de style souhaitée : ${direction}`
-      : "Aucune direction imposée : améliore cette photo de façon naturelle et équilibrée." });
-
-    const body={
-      systemInstruction:{ parts:[{text:SYSTEM_PROMPT}] },
-      contents:[{ role:"user", parts }],
-      generationConfig:{
-        temperature:0.6,
-        maxOutputTokens:2048,                 // évite la troncature du JSON
-        responseMimeType:"application/json",
-        responseSchema:RESPONSE_SCHEMA,
-        thinkingConfig:{ thinkingBudget:0 }   // coupe la "réflexion" qui mange le budget de sortie
-      }
-    };
-
-    dbg("→ POST vers Gemini…");
-    let res;
-    try {
-      res = await fetch(`${API_URL}?key=${encodeURIComponent(apiKey)}`,{
-        method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)
-      });
-    } catch (e) {
-      dbg("⛔ fetch KO (réseau/CORS):", e.name, "—", e.message);
-      throw new Error("Requête réseau échouée — voir le panneau debug.");
-    }
-
-    dbg("← HTTP", res.status, res.statusText);
-    const raw = await res.text();
-
-    if(!res.ok){
-      dbg("⛔ Corps d'erreur:", raw.slice(0,700));
-      let d=""; try{ d=JSON.parse(raw)?.error?.message||""; }catch(_){}
-      if(res.status===400 && /API key/i.test(d)) throw new Error("Clé API invalide.");
-      if(res.status===429) throw new Error("Quota dépassé, réessaie dans un instant.");
-      throw new Error(d || `Erreur API ${res.status}`);
-    }
-
-    let data; try{ data=JSON.parse(raw); }catch(_){ dbg("⛔ HTTP non-JSON:", raw.slice(0,300)); throw new Error("Réponse non-JSON."); }
-
-    const cand = data?.candidates?.[0];
-    dbg("← finishReason:", cand?.finishReason || "?", "| promptFeedback:", JSON.stringify(data?.promptFeedback||{}));
-
-    const text = cand?.content?.parts?.[0]?.text;
-    if(!text){
-      dbg("⛔ Aucun texte renvoyé. Réponse brute:", JSON.stringify(data).slice(0,700));
-      throw new Error("Réponse vide — souvent blocage de sécurité ou troncature (voir debug).");
-    }
-
-    dbg("← Texte reçu (", text.length, "car). Parsing…");
-    try{ const out=JSON.parse(text); dbg("✅ Réglages OK:", out.styleName||""); return out; }
-    catch(_){ dbg("⛔ Réglages non-JSON:", text.slice(0,300)); throw new Error("Réglages illisibles."); }
-  }
-
-  /* ============================================================
-     7. GÉNÉRATION DU XMP
-  ============================================================ */
-  function buildXmp(s){
-    const uuid=(crypto.randomUUID?.()||"00000000000040008000000000000000").replace(/-/g,"").toUpperCase();
-    const name=(s.styleName||"Preset IA").replace(/[<>&"]/g,"");
-    const attrs = ALL_FIELDS.map(f => `   crs:${f.crs}="${fmt(s[f.key], f)}"`).join("\n");
-
-    return `<x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="Preset IA 1.0">
- <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
-  <rdf:Description rdf:about=""
-   xmlns:crs="http://ns.adobe.com/camera-raw-settings/1.0/"
-   crs:PresetType="Normal"
-   crs:Cluster=""
-   crs:UUID="${uuid}"
-   crs:SupportsAmount="False"
-   crs:SupportsColor="True"
-   crs:SupportsMonochrome="True"
-   crs:SupportsHighDynamicRange="True"
-   crs:SupportsNormalDynamicRange="True"
-   crs:SupportsSceneReferred="True"
-   crs:SupportsOutputReferred="True"
-   crs:CameraModelRestriction=""
-   crs:Copyright=""
-   crs:ContactInfo=""
-   crs:Version="15.0"
-   crs:ProcessVersion="11.0"
-   crs:WhiteBalance="Custom"
-   crs:ToneCurveName2012="Custom"
-   crs:ParametricShadowSplit="25"
-   crs:ParametricMidtoneSplit="50"
-   crs:ParametricHighlightSplit="75"
-   crs:ColorGradeBlending="50"
-   crs:ConvertToGrayscale="False"
-${attrs}
-   crs:HasSettings="True">
-   <crs:Name>
-    <rdf:Alt>
-     <rdf:li xml:lang="x-default">${name}</rdf:li>
-    </rdf:Alt>
-   </crs:Name>
-   <crs:Group>
-    <rdf:Alt>
-     <rdf:li xml:lang="x-default">Presets IA</rdf:li>
-    </rdf:Alt>
-   </crs:Group>
-  </rdf:Description>
- </rdf:RDF>
-</x:xmpmeta>`;
-  }
-
-  /* ============================================================
-     8. RÉSUMÉ
-  ============================================================ */
-  function renderSummary(s){
-    styleNameEl.textContent=s.styleName||"Preset IA";
-    analysisEl.textContent=s.analysis||"";
-    settingsWrap.innerHTML = GROUPS.map(group=>{
-      const visible = group.always ? group.fields : group.fields.filter(f => (Number(s[f.key])||0)!==0);
-      if(visible.length===0){
-        return `<div class="px-5 py-3">
-                  <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">${group.title}</div>
-                  <div class="text-sm text-slate-600 mt-1">— neutre —</div>
-                </div>`;
-      }
-      const cells = visible.map(f=>`
-        <div class="bg-slate-800 px-4 py-2.5">
-          <div class="text-xs text-slate-400">${f.label}</div>
-          <div class="text-sm font-semibold tabular-nums">${fmt(s[f.key], f)}</div>
-        </div>`).join("");
-      return `<div class="px-5 py-4">
-                <div class="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">${group.title}</div>
-                <div class="grid grid-cols-2 gap-px bg-slate-700 rounded-lg overflow-hidden">${cells}</div>
-              </div>`;
-    }).join("");
-    resultCard.classList.remove("hidden");
-  }
-
-  /* ============================================================
-     9. TÉLÉCHARGEMENT + EXPORT DIRECT (File System Access API)
-  ============================================================ */
-  function downloadXmp(){
-    if(!lastXmp) return;
-    const blob=new Blob([lastXmp],{type:"application/rdf+xml"});
-    const url=URL.createObjectURL(blob);
-    const a=document.createElement("a"); a.href=url; a.download=FILE_NAME;
-    document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
-  }
-
-  function idb(mode,key,val){
-    return new Promise((res,rej)=>{
-      const o=indexedDB.open("preset-ia-fs",1);
-      o.onupgradeneeded=()=>o.result.createObjectStore("kv");
-      o.onsuccess=()=>{
-        const tx=o.result.transaction("kv",mode), st=tx.objectStore("kv");
-        const r = mode==="readwrite" ? st.put(val,key) : st.get(key);
-        r.onsuccess=()=>res(mode==="readwrite"?true:r.result);
-        r.onerror=()=>rej(r.error);
-      };
-      o.onerror=()=>rej(o.error);
-    });
-  }
-  async function restoreFolder(){
-    if(!("showDirectoryPicker" in window)) return;
-    try{
-      const h=await idb("readonly","lrDir");
-      if(h && (await h.queryPermission({mode:"readwrite"}))==="granted"){
-        dirHandle=h; folderInfo.textContent=`Dossier lié : ${h.name}`;
-      }
-    }catch(_){}
-  }
-  async function exportToLightroom(){
-    if(!lastXmp) return;
-    if(!("showDirectoryPicker" in window)){ downloadXmp(); return; }
-    try{
-      if(!dirHandle){ dirHandle=await window.showDirectoryPicker({mode:"readwrite"}); await idb("readwrite","lrDir",dirHandle); }
-      if((await dirHandle.requestPermission({mode:"readwrite"}))!=="granted"){ downloadXmp(); return; }
-      const fh=await dirHandle.getFileHandle(FILE_NAME,{create:true});
-      const w=await fh.createWritable(); await w.write(lastXmp); await w.close();
-      folderInfo.textContent=`Dossier lié : ${dirHandle.name}`;
-      showStatus(`Exporté dans « ${dirHandle.name} » ! Redémarre Lightroom si besoin.`,"info");
-    }catch(e){
-      if(e?.name==="AbortError") return;
-      dirHandle=null;
-      showStatus("Dossier inaccessible — utilise le téléchargement.","error");
-    }
-  }
-
-  /* ============================================================
-     10. ÉVÉNEMENTS
-  ============================================================ */
-  generateBtn.addEventListener("click", async ()=>{
-    const apiKey=apiKeyInput.value.trim(), direction=promptInput.value.trim();
-    clearStatus();
-    if(!apiKey)        return showStatus("Renseigne d'abord ta clé API Gemini.","error");
-    if(!currentImage)  return showStatus("Choisis d'abord une photo à analyser.","error");
-    setLoading(true); resultCard.classList.add("hidden");
-    try{
-      const settings=await callGemini(apiKey,currentImage,direction);
-      lastXmp=buildXmp(settings);
-      renderSummary(settings);
-      showStatus("Analyse terminée ! Vérifie le diagnostic puis exporte le preset.","info");
-    }catch(err){ dbg("⛔ Échec final:", err.message); showStatus(err.message||"Une erreur est survenue.","error"); }
-    finally{ setLoading(false); }
-  });
-
-  exportBtn.addEventListener("click", exportToLightroom);
-  downloadBtn.addEventListener("click", downloadXmp);
-  if(!("showDirectoryPicker" in window)) exportBtn.classList.add("hidden");
-  restoreFolder();
-
-  /* ============================================================
-     11. SERVICE WORKER
-  ============================================================ */
-  if("serviceWorker" in navigator){
-    window.addEventListener("load", ()=> navigator.serviceWorker.register("sw.js").catch(()=>{}));
-  }
   </script>
 </body>
 </html>
