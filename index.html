@@ -133,8 +133,8 @@
       { key:"Saturation", label:"Saturation",      crs:"Saturation" },
     ]},
     { title:"Balance des blancs", always:true, fields:[
-      { key:"Temperature", label:"Température", crs:"Temperature" },
-      { key:"Tint",        label:"Teinte",     crs:"Tint" },
+      { key:"Temperature", label:"Température", crs:"IncrementalTemperature" },
+      { key:"Tint",        label:"Teinte",     crs:"IncrementalTint" },
     ]},
     { title:"Courbe de tonalité", fields:[
       { key:"CurveHighlights", label:"Hautes lumières", crs:"ParametricHighlights" },
@@ -181,7 +181,7 @@ Règles ABSOLUES :
 - Réponds UNIQUEMENT par un objet JSON valide (aucun texte ni markdown autour). Valeurs numériques.
 - La PLUPART des champs restent à 0 : ne dévie que pour ce qui améliore réellement CETTE photo. Évite la surcorrection.
 - Bornes : "Exposure" -2.0 à 2.0 (décimal). Les "*Hue" d'étalonnage 0 à 360. Les saturations d'étalonnage et "Grain*" 0 à 100. Tout le reste -100 à 100 (entiers).
-- "Temperature"/"Tint" sont RELATIFS (-100 à 100).
+- "Temperature"/"Tint" sont des ajustements RELATIFS et DOUX (-100 à 100) : positif = plus chaud/magenta, négatif = plus froid/vert. Reste en général entre -40 et +40, sauf dominante marquée à corriger.
 - "analysis" : 1 à 2 phrases décrivant ce que tu OBSERVES sur la photo et ta stratégie de correction.
 - "styleName" : nom court du rendu (max 4 mots).`;
 
@@ -367,7 +367,7 @@ Règles ABSOLUES :
    crs:ContactInfo=""
    crs:Version="15.0"
    crs:ProcessVersion="11.0"
-   crs:WhiteBalance="Custom"
+   crs:WhiteBalance="As Shot"
    crs:ToneCurveName2012="Custom"
    crs:ParametricShadowSplit="25"
    crs:ParametricMidtoneSplit="50"
