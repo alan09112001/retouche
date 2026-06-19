@@ -1,7 +1,7 @@
 {
   "name": "Preset IA — Générateur Lightroom",
   "short_name": "Preset IA",
-  "description": "Génère des presets Lightroom (.xmp) sur mesure grâce à l'IA.",
+  "description": "Analyse une photo avec l'IA et génère un preset Lightroom (.xmp) pour la retoucher.",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",

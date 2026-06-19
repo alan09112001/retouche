@@ -1,4 +1,4 @@
-const CACHE = "preset-ia-v1";
+const CACHE = "preset-ia-v2";
 const ASSETS = [
   "./",
   "./index.html",
@@ -16,7 +16,7 @@ self.addEventListener("install", (event) => {
   self.skipWaiting();
 });
 
-// Activation : nettoie les anciens caches
+// Activation : nettoie les anciens caches (v1, etc.)
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches.keys().then((keys) =>
@@ -29,16 +29,12 @@ self.addEventListener("activate", (event) => {
 // Fetch
 self.addEventListener("fetch", (event) => {
   const { request } = event;
-
-  // On ne touche pas aux requêtes non-GET
-  if (request.method !== "GET") return;
+  if (request.method !== "GET") return;            // jamais les POST (API Gemini)
 
   const url = new URL(request.url);
 
-  // Les appels à l'API Gemini ne sont JAMAIS mis en cache (network only)
-  if (url.hostname.includes("generativelanguage.googleapis.com")) {
-    return; // laisse le navigateur gérer normalement
-  }
+  // Les appels à l'API Gemini ne sont JAMAIS mis en cache
+  if (url.hostname.includes("generativelanguage.googleapis.com")) return;
 
   // Coque de l'app : cache d'abord, réseau en repli
   event.respondWith(
@@ -46,14 +42,13 @@ self.addEventListener("fetch", (event) => {
       if (cached) return cached;
       return fetch(request)
         .then((res) => {
-          // Met en cache les réponses valides de même origine + Tailwind
           if (res.ok && (url.origin === location.origin || url.hostname.includes("tailwindcss.com"))) {
             const copy = res.clone();
             caches.open(CACHE).then((cache) => cache.put(request, copy));
           }
           return res;
         })
-        .catch(() => cached); // hors-ligne : renvoie ce qu'on a, sinon échec
+        .catch(() => cached);
     })
   );
 });

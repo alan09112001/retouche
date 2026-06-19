@@ -62,7 +62,7 @@
     <button id="generateBtn"
       class="w-full rounded-lg bg-sky-600 hover:bg-sky-500 active:bg-sky-700 disabled:opacity-50
              disabled:cursor-not-allowed font-semibold py-3 transition flex items-center justify-center gap-2">
-      <span id="btnLabel">Analyser & générer le preset</span>
+      <span id="btnLabel">Analyser &amp; générer le preset</span>
       <svg id="btnSpinner" class="hidden animate-spin h-5 w-5" viewBox="0 0 24 24" fill="none">
         <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
         <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.4 0 0 5.4 0 12h4z"></path>
@@ -74,7 +74,7 @@
     <!-- Résultat -->
     <section id="resultCard" class="hidden mt-6 rounded-xl bg-slate-800/60 border border-slate-700 overflow-hidden">
       <div class="px-5 py-4 border-b border-slate-700">
-        <h2 class="font-semibold text-lg">Diagnostic & réglages</h2>
+        <h2 class="font-semibold text-lg">Diagnostic &amp; réglages</h2>
         <p id="styleName" class="text-sky-400 text-sm mt-0.5"></p>
         <p id="analysis" class="text-slate-300 text-sm mt-1"></p>
       </div>
@@ -92,14 +92,21 @@
       </div>
     </section>
 
-    <footer class="text-center text-xs text-slate-600 mt-10">
+    <footer class="text-center text-xs text-slate-600 mt-10 mb-24">
       Le preset est calibré pour la photo analysée. Importe-le : Développement → Paramètres prédéfinis → clic droit → Importer.
     </footer>
   </main>
 
+  <!-- Bouton pour afficher/masquer le debug -->
+  <button id="dbgToggle"
+    class="fixed bottom-3 right-3 z-[10000] rounded-full bg-slate-700/90 hover:bg-slate-600 text-white
+           w-11 h-11 text-lg shadow-lg" title="Afficher/masquer le debug">🐞</button>
+
   <script>
   /* ============================================================
      1. CONFIGURATION DES PARAMÈTRES (data-driven)
+     key (JSON/IA) → crs (attribut XMP Lightroom)
+     signed:false ⇒ valeur sans signe (teintes 0-360, sat 0-100)
   ============================================================ */
   const HUES = ["Red","Orange","Yellow","Green","Aqua","Blue","Purple","Magenta"];
   const HUE_FR = {Red:"Rouge",Orange:"Orange",Yellow:"Jaune",Green:"Vert",Aqua:"Cyan",Blue:"Bleu",Purple:"Violet",Magenta:"Magenta"};
@@ -160,7 +167,7 @@
   const MODEL = "gemini-2.5-flash";
   const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
   const FILE_NAME = "preset-ia.xmp";
-  const MAX_EDGE = 1280; // redimensionnement avant envoi
+  const MAX_EDGE = 1280; // redimensionnement de la photo avant envoi
 
   const SYSTEM_PROMPT = `Tu es un retoucheur photo expert Adobe Lightroom. On te fournit UNE photo, et parfois une direction de style.
 
@@ -195,6 +202,22 @@ Règles ABSOLUES :
   let lastXmp = null;
   let currentImage = null;   // { mimeType, data(base64) }
   let dirHandle = null;
+
+  /* ---------- PANNEAU DEBUG ---------- */
+  const _dbg = document.createElement("pre");
+  _dbg.style.cssText = "position:fixed;left:0;right:0;bottom:0;max-height:42vh;overflow:auto;margin:0;padding:10px;background:#000;color:#0f0;font:11px/1.45 monospace;z-index:9998;white-space:pre-wrap;border-top:2px solid #0f0";
+  document.body.appendChild(_dbg);
+  function dbg(...a){
+    const line = a.map(x => typeof x==="string" ? x : JSON.stringify(x)).join(" ");
+    _dbg.textContent += line + "\n";
+    _dbg.scrollTop = _dbg.scrollHeight;
+  }
+  $("dbgToggle").addEventListener("click", ()=>{
+    _dbg.style.display = (_dbg.style.display==="none") ? "block" : "none";
+  });
+  window.addEventListener("error", e => dbg("⛔ JS:", e.message, "@", (e.filename||"")+":"+e.lineno));
+  window.addEventListener("unhandledrejection", e => dbg("⛔ Promise:", (e.reason?.message || e.reason) + ""));
+  dbg("✅ Debug prêt —", navigator.userAgent);
 
   /* ============================================================
      3. CLÉ API
@@ -249,16 +272,19 @@ Règles ABSOLUES :
     if(!file) return;
     clearStatus();
     try{
+      dbg("📷 Photo:", file.name, Math.round(file.size/1024)+" KB");
       const out=await loadImage(file);
       currentImage={ mimeType:out.mimeType, data:out.data };
       preview.src=out.preview; preview.classList.remove("hidden"); dropHint.classList.add("hidden");
-    }catch(e){ showStatus(e.message,"error"); currentImage=null; }
+      dbg("✅ Redimensionnée →", Math.round(out.data.length/1024)+" KB base64");
+    }catch(e){ dbg("⛔", e.message); showStatus(e.message,"error"); currentImage=null; }
   });
 
   /* ============================================================
      6. APPEL GEMINI (multimodal : image + direction)
   ============================================================ */
   async function callGemini(apiKey, image, direction){
+    dbg("→ Image:", image.mimeType, Math.round(image.data.length/1024)+" KB (base64)");
     const parts=[ { inlineData:{ mimeType:image.mimeType, data:image.data } } ];
     parts.push({ text: direction
       ? `Direction de style souhaitée : ${direction}`
@@ -267,21 +293,51 @@ Règles ABSOLUES :
     const body={
       systemInstruction:{ parts:[{text:SYSTEM_PROMPT}] },
       contents:[{ role:"user", parts }],
-      generationConfig:{ temperature:0.6, responseMimeType:"application/json", responseSchema:RESPONSE_SCHEMA }
+      generationConfig:{
+        temperature:0.6,
+        maxOutputTokens:2048,                 // évite la troncature du JSON
+        responseMimeType:"application/json",
+        responseSchema:RESPONSE_SCHEMA,
+        thinkingConfig:{ thinkingBudget:0 }   // coupe la "réflexion" qui mange le budget de sortie
+      }
     };
-    const res=await fetch(`${API_URL}?key=${encodeURIComponent(apiKey)}`,{
-      method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)
-    });
+
+    dbg("→ POST vers Gemini…");
+    let res;
+    try {
+      res = await fetch(`${API_URL}?key=${encodeURIComponent(apiKey)}`,{
+        method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)
+      });
+    } catch (e) {
+      dbg("⛔ fetch KO (réseau/CORS):", e.name, "—", e.message);
+      throw new Error("Requête réseau échouée — voir le panneau debug.");
+    }
+
+    dbg("← HTTP", res.status, res.statusText);
+    const raw = await res.text();
+
     if(!res.ok){
-      let d=""; try{ d=(await res.json())?.error?.message||""; }catch(_){}
+      dbg("⛔ Corps d'erreur:", raw.slice(0,700));
+      let d=""; try{ d=JSON.parse(raw)?.error?.message||""; }catch(_){}
       if(res.status===400 && /API key/i.test(d)) throw new Error("Clé API invalide.");
       if(res.status===429) throw new Error("Quota dépassé, réessaie dans un instant.");
-      throw new Error(d||`Erreur API (${res.status}).`);
+      throw new Error(d || `Erreur API ${res.status}`);
     }
-    const data=await res.json();
-    const text=data?.candidates?.[0]?.content?.parts?.[0]?.text;
-    if(!text) throw new Error("Réponse vide de l'IA.");
-    try{ return JSON.parse(text); }catch(_){ throw new Error("L'IA n'a pas renvoyé de JSON exploitable."); }
+
+    let data; try{ data=JSON.parse(raw); }catch(_){ dbg("⛔ HTTP non-JSON:", raw.slice(0,300)); throw new Error("Réponse non-JSON."); }
+
+    const cand = data?.candidates?.[0];
+    dbg("← finishReason:", cand?.finishReason || "?", "| promptFeedback:", JSON.stringify(data?.promptFeedback||{}));
+
+    const text = cand?.content?.parts?.[0]?.text;
+    if(!text){
+      dbg("⛔ Aucun texte renvoyé. Réponse brute:", JSON.stringify(data).slice(0,700));
+      throw new Error("Réponse vide — souvent blocage de sécurité ou troncature (voir debug).");
+    }
+
+    dbg("← Texte reçu (", text.length, "car). Parsing…");
+    try{ const out=JSON.parse(text); dbg("✅ Réglages OK:", out.styleName||""); return out; }
+    catch(_){ dbg("⛔ Réglages non-JSON:", text.slice(0,300)); throw new Error("Réglages illisibles."); }
   }
 
   /* ============================================================
@@ -426,7 +482,7 @@ ${attrs}
       lastXmp=buildXmp(settings);
       renderSummary(settings);
       showStatus("Analyse terminée ! Vérifie le diagnostic puis exporte le preset.","info");
-    }catch(err){ showStatus(err.message||"Une erreur est survenue.","error"); }
+    }catch(err){ dbg("⛔ Échec final:", err.message); showStatus(err.message||"Une erreur est survenue.","error"); }
     finally{ setLoading(false); }
   });
 
