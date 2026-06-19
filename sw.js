@@ -1,4 +1,4 @@
-const CACHE = "preset-ia-v2";
+const CACHE = "preset-ia-v3";
 const ASSETS = [
   "./",
   "./index.html",
@@ -6,17 +6,13 @@ const ASSETS = [
   "https://cdn.tailwindcss.com"
 ];
 
-// Installation : pré-cache la coque de l'application
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open(CACHE).then((cache) =>
-      cache.addAll(ASSETS).catch(() => {/* ignore les ressources non joignables */})
-    )
+    caches.open(CACHE).then((cache) => cache.addAll(ASSETS).catch(() => {}))
   );
   self.skipWaiting();
 });
 
-// Activation : nettoie les anciens caches (v1, etc.)
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches.keys().then((keys) =>
@@ -26,29 +22,42 @@ self.addEventListener("activate", (event) => {
   self.clients.claim();
 });
 
-// Fetch
 self.addEventListener("fetch", (event) => {
   const { request } = event;
-  if (request.method !== "GET") return;            // jamais les POST (API Gemini)
+  if (request.method !== "GET") return;
 
   const url = new URL(request.url);
 
-  // Les appels à l'API Gemini ne sont JAMAIS mis en cache
+  // Appels API Gemini : jamais touchés
   if (url.hostname.includes("generativelanguage.googleapis.com")) return;
 
-  // Coque de l'app : cache d'abord, réseau en repli
+  // PAGE / NAVIGATION → RÉSEAU D'ABORD (toujours la dernière version déployée)
+  if (request.mode === "navigate" || request.destination === "document") {
+    event.respondWith(
+      fetch(request)
+        .then((res) => {
+          const copy = res.clone();
+          caches.open(CACHE).then((c) => c.put(request, copy));
+          return res;
+        })
+        .catch(() => caches.match(request).then((r) => r || caches.match("./index.html")))
+    );
+    return;
+  }
+
+  // Reste (CSS, CDN…) → cache d'abord
   event.respondWith(
-    caches.match(request).then((cached) => {
-      if (cached) return cached;
-      return fetch(request)
+    caches.match(request).then((cached) =>
+      cached ||
+      fetch(request)
         .then((res) => {
           if (res.ok && (url.origin === location.origin || url.hostname.includes("tailwindcss.com"))) {
             const copy = res.clone();
-            caches.open(CACHE).then((cache) => cache.put(request, copy));
+            caches.open(CACHE).then((c) => c.put(request, copy));
           }
           return res;
         })
-        .catch(() => cached);
-    })
+        .catch(() => cached)
+    )
   );
 });
