@@ -134,7 +134,7 @@
     ]},
     { title:"Balance des blancs", always:true, fields:[
       { key:"Temperature", label:"Température", crs:"IncrementalTemperature" },
-      { key:"Tint",        label:"Teinte",     crs:"IncrementalTint" },
+      { key:"Tint",        label:"Teinte",      crs:"IncrementalTint" },
     ]},
     { title:"Courbe de tonalité", fields:[
       { key:"CurveHighlights", label:"Hautes lumières", crs:"ParametricHighlights" },
@@ -164,30 +164,36 @@
   ];
   const ALL_FIELDS = GROUPS.flatMap(g => g.fields);
 
-  const MODEL = "gemini-2.5-flash";
+  const MODEL = "gemini-2.5-flash"; // Tu peux mettre gemini-2.5-pro ici si tu cherches encore plus de finesse
   const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
   const FILE_NAME = "preset-ia.xmp";
-  const MAX_EDGE = 1280; // redimensionnement de la photo avant envoi
+  const MAX_EDGE = 1280;
 
-  const SYSTEM_PROMPT = `Tu es un retoucheur photo expert Adobe Lightroom. On te fournit UNE photo, et parfois une direction de style.
+  // SYSTEM PROMPT AMÉLIORÉ AVEC CHAÎNE DE PENSÉE (Chain-of-Thought) EN JSON
+  const SYSTEM_PROMPT = `Tu es un retoucheur photo professionnel expert Adobe Lightroom. Tu vas analyser l'image fournie et la demande de style de l'utilisateur pour générer le meilleur preset de correction et d'ambiance.
 
-Analyse RÉELLEMENT l'image que tu vois : exposition (sous/sur-exposée ?), balance des blancs et dominante de couleur, contraste, hautes lumières et ombres écrêtées, saturation, netteté apparente, ambiance générale.
+Tu dois impérativement suivre cette structure logique :
+1. Analyse la photo de manière critique (exposition, balance des blancs, gestion des ombres et hautes lumières).
+2. Définis une stratégie claire pour appliquer proprement le style demandé sans détruire la qualité de l'image.
+3. Traduis cette réflexion en valeurs curseurs Lightroom précises et subtiles.
 
-Puis calcule un réglage Lightroom qui :
-1. CORRIGE les défauts techniques constatés sur cette photo précise.
-2. Applique la direction de style si elle est fournie ; sinon, propose une amélioration naturelle et équilibrée.
+Génère ta réponse UNIQUEMENT sous la forme d'un objet JSON strict respectant le schéma demandé.
 
-Règles ABSOLUES :
-- Réponds UNIQUEMENT par un objet JSON valide (aucun texte ni markdown autour). Valeurs numériques.
-- La PLUPART des champs restent à 0 : ne dévie que pour ce qui améliore réellement CETTE photo. Évite la surcorrection.
-- Bornes : "Exposure" -2.0 à 2.0 (décimal). Les "*Hue" d'étalonnage 0 à 360. Les saturations d'étalonnage et "Grain*" 0 à 100. Tout le reste -100 à 100 (entiers).
-- "Temperature"/"Tint" sont des ajustements RELATIFS et DOUX (-100 à 100) : positif = plus chaud/magenta, négatif = plus froid/vert. Reste en général entre -40 et +40, sauf dominante marquée à corriger.
-- "analysis" : 1 à 2 phrases décrivant ce que tu OBSERVES sur la photo et ta stratégie de correction.
-- "styleName" : nom court du rendu (max 4 mots).`;
+Règles absolues pour les réglages :
+- La plupart des valeurs doivent rester proches de 0 pour éviter la surcorrection criarde. Reste élégant et pro.
+- "Exposure" : de -2.0 à 2.0 (décimal).
+- "Temperature" / "Tint" : Ajustements relatifs doux de -50 à 50 (positif = plus chaud/magenta, négatif = plus froid/vert).
+- Curseurs de base et TSL : de -100 à 100 (entiers).
+- Bornes d'étalonnage (*Hue) : de 0 à 360.
+- Pas de texte markdown ni d'explications en dehors de l'objet JSON.`;
 
-  const props = { styleName:{type:"STRING"}, analysis:{type:"STRING"} };
-  for (const f of ALL_FIELDS) props[f.key] = { type:"NUMBER" };
-  const RESPONSE_SCHEMA = { type:"OBJECT", properties:props, required:["styleName","analysis"] };
+  // Construction dynamique du schéma de réponse attendu par Gemini
+  const props = { 
+    styleName: { type: "STRING" }, 
+    analysis: { type: "STRING" } 
+  };
+  for (const f of ALL_FIELDS) props[f.key] = { type: "NUMBER" };
+  const RESPONSE_SCHEMA = { type: "OBJECT", properties: props, required: ["styleName", "analysis", ...ALL_FIELDS.map(f => f.key)] };
 
   /* ============================================================
      2. DOM
@@ -287,18 +293,17 @@ Règles ABSOLUES :
     dbg("→ Image:", image.mimeType, Math.round(image.data.length/1024)+" KB (base64)");
     const parts=[ { inlineData:{ mimeType:image.mimeType, data:image.data } } ];
     parts.push({ text: direction
-      ? `Direction de style souhaitée : ${direction}`
-      : "Aucune direction imposée : améliore cette photo de façon naturelle et équilibrée." });
+      ? `Direction artistique et style demandés par l'utilisateur : ${direction}`
+      : "Aucun style imposé. Fais une analyse pro et propose une amélioration de correction et d'ambiance naturelle, équilibrée et flatteuse." });
 
     const body={
       systemInstruction:{ parts:[{text:SYSTEM_PROMPT}] },
       contents:[{ role:"user", parts }],
       generationConfig:{
-        temperature:0.6,
-        maxOutputTokens:2048,                 // évite la troncature du JSON
+        temperature:0.4, // Un peu plus bas pour éviter que l'IA ne devienne trop chaotique sur les curseurs
+        maxOutputTokens:4096,
         responseMimeType:"application/json",
-        responseSchema:RESPONSE_SCHEMA,
-        thinkingConfig:{ thinkingBudget:0 }   // coupe la "réflexion" qui mange le budget de sortie
+        responseSchema:RESPONSE_SCHEMA
       }
     };
 
@@ -327,7 +332,7 @@ Règles ABSOLUES :
     let data; try{ data=JSON.parse(raw); }catch(_){ dbg("⛔ HTTP non-JSON:", raw.slice(0,300)); throw new Error("Réponse non-JSON."); }
 
     const cand = data?.candidates?.[0];
-    dbg("← finishReason:", cand?.finishReason || "?", "| promptFeedback:", JSON.stringify(data?.promptFeedback||{}));
+    dbg("← finishReason:", cand?.finishReason || "?");
 
     const text = cand?.content?.parts?.[0]?.text;
     if(!text){
